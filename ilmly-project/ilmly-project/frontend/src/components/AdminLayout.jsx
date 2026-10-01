@@ -6,6 +6,8 @@ const NAV = [
   { to: "/admin", label: "Bosh sahifa", icon: "🏠", exact: true },
   { to: "/admin/users", label: "Foydalanuvchilar", icon: "👥" },
   { to: "/admin/manage", label: "Kurslar", icon: "📘" },
+  { to: "/admin/premium", label: "Premium", icon: "💎" },
+  { to: "/admin/news", label: "Yangiliklar", icon: "📰" },
   { to: "/fikrlar", label: "Komentariylar", icon: "💬" },
   { to: "/admin/settings", label: "Sozlamalar", icon: "⚙️" },
 ];

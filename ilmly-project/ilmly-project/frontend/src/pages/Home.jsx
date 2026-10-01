@@ -2,17 +2,20 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import api from "../api";
 import CourseCard from "../components/CourseCard";
+import NewsCarousel from "../components/NewsCarousel";
 
 export default function Home() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [news, setNews] = useState([]);
 
   useEffect(() => {
     api
       .get("/courses")
       .then((res) => setCourses(res.data))
       .finally(() => setLoading(false));
+    api.get("/news").then((res) => setNews(res.data));
   }, []);
 
   const filtered = courses.filter((c) =>
@@ -237,6 +240,20 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {news.length > 0 && (
+        <div className="container">
+          <div className="section">
+            <div className="section-head">
+              <div>
+                <span style={{ color: "var(--teal)", fontSize: "0.8rem", fontWeight: 700 }}>YANGILIKLAR</span>
+                <h2 style={{ marginTop: 8 }}>So'nggi yangiliklar</h2>
+              </div>
+            </div>
+            <NewsCarousel news={news} />
+          </div>
+        </div>
+      )}
 
       <div className="footer">© 2026 Ilmly. Barcha huquqlar himoyalangan.</div>
     </div>

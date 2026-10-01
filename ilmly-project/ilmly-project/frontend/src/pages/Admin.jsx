@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import api, { errMsg } from "../api";
 
-const emptyForm = { title: "", description: "", price: "", image: "course", lessons_count: "", level: "Boshlang'ich", group_link: "" };
+const emptyForm = { title: "", description: "", price: "", image: "course", photo: "", lessons_count: "", level: "Boshlang'ich", group_link: "" };
 
 export default function Admin() {
   const [courses, setCourses] = useState([]);
@@ -16,6 +16,8 @@ export default function Admin() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [photoSource, setPhotoSource] = useState("theme"); // 'theme' | 'upload' | 'link'
+  const [photoLink, setPhotoLink] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [certModalOpen, setCertModalOpen] = useState(false);
@@ -87,6 +89,8 @@ export default function Admin() {
   function openAdd() {
     setEditing(null);
     setForm(emptyForm);
+    setPhotoSource("theme");
+    setPhotoLink("");
     setError("");
     setModalOpen(true);
   }
@@ -98,10 +102,21 @@ export default function Admin() {
       description: course.description,
       price: course.price,
       image: course.image,
+      photo: course.photo || "",
       lessons_count: course.lessons_count,
       level: course.level,
       group_link: course.group_link || "",
     });
+    if (course.photo && course.photo.startsWith("data:")) {
+      setPhotoSource("upload");
+      setPhotoLink("");
+    } else if (course.photo) {
+      setPhotoSource("link");
+      setPhotoLink(course.photo);
+    } else {
+      setPhotoSource("theme");
+      setPhotoLink("");
+    }
     setError("");
     setModalOpen(true);
   }
@@ -125,6 +140,7 @@ export default function Admin() {
         ...form,
         price: parseFloat(form.price),
         lessons_count: parseInt(form.lessons_count || 0, 10),
+        photo: photoSource === "theme" ? "" : photoSource === "link" ? photoLink.trim() : form.photo,
       };
       if (editing) {
         await api.put(`/courses/${editing.id}`, payload);
@@ -365,15 +381,67 @@ export default function Admin() {
                   </select>
                 </div>
                 <div className="field">
-                  <label>Rang mavzusi</label>
-                  <select value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })}>
-                    <option value="python">Python (ko'k)</option>
-                    <option value="react">React (yashil-ko'k)</option>
-                    <option value="flask">Flask (jigarrang)</option>
-                    <option value="javascript">JavaScript (sariq)</option>
-                    <option value="design">Dizayn (pushti)</option>
-                    <option value="fullstack">Full-stack (binafsha)</option>
-                  </select>
+                  <label>Kurs rasmi</label>
+                  <div className="source-toggle">
+                    <button type="button" className={photoSource === "theme" ? "active" : ""} onClick={() => setPhotoSource("theme")}>
+                      🎨 Tayyor rang
+                    </button>
+                    <button type="button" className={photoSource === "upload" ? "active" : ""} onClick={() => setPhotoSource("upload")}>
+                      🖼️ Rasm yuklash
+                    </button>
+                    <button type="button" className={photoSource === "link" ? "active" : ""} onClick={() => setPhotoSource("link")}>
+                      🔗 Rasm havolasi
+                    </button>
+                  </div>
+
+                  {photoSource === "theme" && (
+                    <select value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })}>
+                      <option value="course">Umumiy (harf belgisi)</option>
+                      <option value="python">Python</option>
+                      <option value="react">React</option>
+                      <option value="flask">Flask</option>
+                      <option value="javascript">JavaScript</option>
+                      <option value="typescript">TypeScript</option>
+                      <option value="design">CSS / Dizayn</option>
+                      <option value="fullstack">Node.js / Full-stack</option>
+                      <option value="java">Java</option>
+                      <option value="php">PHP</option>
+                      <option value="csharp">C#</option>
+                    </select>
+                  )}
+
+                  {photoSource === "upload" && (
+                    <>
+                      <label className="file-input-label">
+                        {form.photo ? "Rasm tanlandi ✓" : "Rasm yuklash uchun bosing"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => setForm((f) => ({ ...f, photo: reader.result }));
+                            reader.readAsDataURL(file);
+                          }}
+                        />
+                      </label>
+                      {form.photo && (
+                        <div className="image-preview">
+                          <img src={form.photo} alt="preview" />
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {photoSource === "link" && (
+                    <input
+                      value={photoLink}
+                      onChange={(e) => setPhotoLink(e.target.value)}
+                      placeholder="https://..."
+                    />
+                  )}
                 </div>
                 <div className="field">
                   <label>Guruh chat havolasi (Telegram/Zoom, ixtiyoriy)</label>

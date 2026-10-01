@@ -19,8 +19,12 @@ const THUMB_ICONS = {
   react: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg",
   flask: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/flask/flask-original.svg",
   javascript: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/javascript/javascript-original.svg",
+  typescript: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg",
   design: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/css3/css3-original.svg",
   fullstack: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg",
+  java: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg",
+  php: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/php/php-original.svg",
+  csharp: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/csharp/csharp-original.svg",
 };
 
 function toEmbedUrl(url) {
@@ -108,8 +112,15 @@ export default function CourseDetail() {
     <div className="container">
       <div className="detail-wrap">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-          <div className="detail-hero" style={{ background: gradient }}>
-            {heroIcon && (
+          <div
+            className="detail-hero"
+            style={
+              course.photo
+                ? { backgroundImage: `url(${course.photo})`, backgroundSize: "cover", backgroundPosition: "center" }
+                : { background: gradient }
+            }
+          >
+            {!course.photo && heroIcon && (
               <div
                 style={{
                   position: "absolute",

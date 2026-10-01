@@ -4,6 +4,7 @@ import api, { errMsg } from "../api";
 import { useAuth } from "../AuthContext";
 
 const TELEGRAM_LINK = "https://t.me/+ka_C0Lcf2xRhNDgy";
+const BADGE_OPTIONS = ["💎", "⭐", "👑", "🔥", "🚀", "⚡", "🏆", "🎯"];
 
 export default function Profile() {
   const { user, updateUser } = useAuth();
@@ -12,6 +13,7 @@ export default function Profile() {
   const [totalCompleted, setTotalCompleted] = useState(0);
   const [loading, setLoading] = useState(true);
   const [avatarSaving, setAvatarSaving] = useState(false);
+  const [badgePickerOpen, setBadgePickerOpen] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -70,6 +72,16 @@ export default function Profile() {
       setPwError(errMsg(err, "Parolni yangilashda xatolik"));
     } finally {
       setPwSaving(false);
+    }
+  }
+
+  async function handleSelectBadge(badge) {
+    try {
+      await api.put("/me/badge", { badge });
+      updateUser({ badge });
+      setBadgePickerOpen(false);
+    } catch (err) {
+      alert(errMsg(err, "Belgini o'zgartirishda xatolik"));
     }
   }
 
@@ -139,6 +151,26 @@ export default function Profile() {
             {avatarSaving ? "..." : "📷"}
             <input type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: "none" }} />
           </label>
+          {user.premium?.active && (
+            <button
+              onClick={() => setBadgePickerOpen(true)}
+              title="Premium belgini o'zgartirish"
+              style={{
+                position: "absolute",
+                top: -4,
+                left: -4,
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                background: "var(--teal)",
+                border: "2px solid var(--bg-card)",
+                fontSize: "0.9rem",
+                cursor: "pointer",
+              }}
+            >
+              {user.badge || "💎"}
+            </button>
+          )}
         </div>
         <div>
           <h2 style={{ fontSize: "1.4rem" }}>{user.name}</h2>
@@ -313,6 +345,34 @@ export default function Profile() {
           {pwSaving ? "Yangilanmoqda..." : "Parolni yangilash"}
         </button>
       </form>
+
+      {badgePickerOpen && (
+        <div className="modal-backdrop" onClick={() => setBadgePickerOpen(false)}>
+          <div className="modal" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+            <h3>Premium belgini tanlang</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginTop: 16 }}>
+              {BADGE_OPTIONS.map((b) => (
+                <button
+                  key={b}
+                  onClick={() => handleSelectBadge(b)}
+                  style={{
+                    fontSize: "1.6rem",
+                    padding: "14px 0",
+                    borderRadius: 12,
+                    border: user.badge === b ? "2px solid var(--gold)" : "1px solid var(--border)",
+                    background: "var(--bg-elevated)",
+                  }}
+                >
+                  {b}
+                </button>
+              ))}
+            </div>
+            <button className="btn btn-outline btn-block" style={{ marginTop: 18 }} onClick={() => setBadgePickerOpen(false)}>
+              Yopish
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

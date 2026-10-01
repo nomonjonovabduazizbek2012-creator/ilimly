@@ -47,6 +47,9 @@ export default function Navbar() {
           <Link to="/fikrlar" className={location.pathname === "/fikrlar" ? "active" : ""}>
             Fikrlar
           </Link>
+          <Link to="/premium" className={location.pathname === "/premium" ? "active" : ""} style={{ color: "var(--gold-soft)" }}>
+            💎 Premium
+          </Link>
           {user && (
             <Link to="/playground" className={location.pathname === "/playground" ? "active" : ""}>
               Kod muharriri
@@ -98,13 +101,34 @@ export default function Navbar() {
                 to="/profile"
                 className="avatar-badge"
                 title={user.name}
-                style={
-                  user.avatar
+                style={{
+                  position: "relative",
+                  ...(user.avatar
                     ? { background: `url(${user.avatar}) center/cover`, color: "transparent" }
-                    : undefined
-                }
+                    : {}),
+                }}
               >
                 {!user.avatar && initials}
+                {user.premium?.active && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      bottom: -2,
+                      right: -2,
+                      width: 16,
+                      height: 16,
+                      borderRadius: "50%",
+                      background: "var(--teal)",
+                      border: "2px solid var(--bg)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "0.6rem",
+                    }}
+                  >
+                    {user.badge || "💎"}
+                  </span>
+                )}
               </Link>
               <button className="btn btn-outline" onClick={handleLogout}>
                 Chiqish

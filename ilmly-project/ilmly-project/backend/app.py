@@ -56,6 +56,9 @@ def init_db():
             gender TEXT,
             phone TEXT,
             xp INTEGER DEFAULT 0,
+            premium_until TEXT,
+            premium_lifetime INTEGER DEFAULT 0,
+            badge TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """
@@ -68,6 +71,7 @@ def init_db():
             description TEXT NOT NULL,
             price REAL NOT NULL,
             image TEXT,
+            photo TEXT,
             lessons_count INTEGER DEFAULT 0,
             level TEXT DEFAULT 'Boshlang''ich',
             group_link TEXT,
@@ -84,6 +88,30 @@ def init_db():
             purchased_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (id),
             FOREIGN KEY (course_id) REFERENCES courses (id)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS premium_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            plan TEXT NOT NULL,
+            proof_image TEXT,
+            status TEXT DEFAULT 'pending',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS news (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            image TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """
     )
@@ -160,6 +188,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             course_id INTEGER NOT NULL,
             title TEXT NOT NULL,
+            image TEXT,
             order_index INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (course_id) REFERENCES courses (id)
@@ -365,11 +394,28 @@ def change_password():
     return jsonify({"message": "Parol muvaffaqiyatli yangilandi"})
 
 
+@app.route("/api/me/badge", methods=["PUT"])
+@token_required
+def update_my_badge():
+    data = request.get_json(silent=True) or {}
+    badge = data.get("badge")
+
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (g.current_user_id,)).fetchone()
+    status = user_premium_status(user)
+    if not status["active"]:
+        return jsonify({"error": "Belgi faqat Premium foydalanuvchilar uchun mavjud"}), 403
+
+    db.execute("UPDATE users SET badge = ? WHERE id = ?", (badge, g.current_user_id))
+    db.commit()
+    return jsonify({"message": "Belgi yangilandi", "badge": badge})
+
+
 @app.route("/api/me", methods=["GET"])
 @token_required
 def me():
     db = get_db()
-    user = db.execute("SELECT id, name, email, is_admin, avatar, xp FROM users WHERE id = ?", (g.current_user_id,)).fetchone()
+    user = db.execute("SELECT id, name, email, is_admin, avatar, xp, premium_until, premium_lifetime, badge FROM users WHERE id = ?", (g.current_user_id,)).fetchone()
     if not user:
         return jsonify({"error": "Foydalanuvchi topilmadi"}), 404
     xp = user["xp"] or 0
@@ -377,6 +423,8 @@ def me():
         "id": user["id"], "name": user["name"], "email": user["email"],
         "is_admin": bool(user["is_admin"]), "avatar": user["avatar"],
         "xp": xp, "level": xp // 100 + 1,
+        "premium": user_premium_status(user),
+        "badge": user["badge"],
     })
 
 
@@ -427,6 +475,7 @@ def add_course():
     description = (data.get("description") or "").strip()
     price = data.get("price")
     image = (data.get("image") or "course").strip()
+    photo = data.get("photo") or None
     lessons_count = data.get("lessons_count", 0)
     level = data.get("level", "Boshlang'ich")
     group_link = (data.get("group_link") or "").strip() or None
@@ -436,8 +485,8 @@ def add_course():
 
     db = get_db()
     cur = db.execute(
-        "INSERT INTO courses (title, description, price, image, lessons_count, level, group_link) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (title, description, float(price), image, int(lessons_count or 0), level, group_link),
+        "INSERT INTO courses (title, description, price, image, photo, lessons_count, level, group_link) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (title, description, float(price), image, photo, int(lessons_count or 0), level, group_link),
     )
     db.commit()
     course = db.execute("SELECT * FROM courses WHERE id = ?", (cur.lastrowid,)).fetchone()
@@ -458,13 +507,14 @@ def update_course(course_id):
     description = data.get("description", course["description"])
     price = data.get("price", course["price"])
     image = data.get("image", course["image"])
+    photo = data.get("photo", course["photo"])
     lessons_count = data.get("lessons_count", course["lessons_count"])
     level = data.get("level", course["level"])
     group_link = data.get("group_link", course["group_link"])
 
     db.execute(
-        "UPDATE courses SET title=?, description=?, price=?, image=?, lessons_count=?, level=?, group_link=? WHERE id=?",
-        (title, description, price, image, lessons_count, level, group_link, course_id),
+        "UPDATE courses SET title=?, description=?, price=?, image=?, photo=?, lessons_count=?, level=?, group_link=? WHERE id=?",
+        (title, description, price, image, photo, lessons_count, level, group_link, course_id),
     )
     db.commit()
     updated = db.execute("SELECT * FROM courses WHERE id = ?", (course_id,)).fetchone()
@@ -517,6 +567,7 @@ def list_modules(course_id):
 def add_module(course_id):
     data = request.get_json(silent=True) or {}
     title = (data.get("title") or "").strip()
+    image = data.get("image") or None
     if not title:
         return jsonify({"error": "Modul nomini kiriting"}), 400
 
@@ -530,8 +581,8 @@ def add_module(course_id):
     ).fetchone()["o"]
 
     cur = db.execute(
-        "INSERT INTO modules (course_id, title, order_index) VALUES (?, ?, ?)",
-        (course_id, title, max_order + 1),
+        "INSERT INTO modules (course_id, title, image, order_index) VALUES (?, ?, ?, ?)",
+        (course_id, title, image, max_order + 1),
     )
     db.commit()
     module = db.execute("SELECT * FROM modules WHERE id = ?", (cur.lastrowid,)).fetchone()
@@ -664,27 +715,264 @@ def delete_lesson(lesson_id):
 
 
 # ---------------------------------------------------------------------------
+# Premium subscription routes
+# ---------------------------------------------------------------------------
+PREMIUM_CARD_NUMBER = "5614 6831 0242 8919"
+
+PLAN_LABELS = {
+    "monthly": "Oylik — 20,000 so'm",
+    "yearly": "Yillik — 300,000 so'm",
+    "lifetime": "Umrbod",
+}
+
+
+def user_premium_status(user_row):
+    if user_row["premium_lifetime"]:
+        return {"active": True, "plan": "lifetime", "expires_at": None}
+    if user_row["premium_until"]:
+        expires = datetime.datetime.strptime(user_row["premium_until"], "%Y-%m-%d %H:%M:%S")
+        if expires > datetime.datetime.utcnow():
+            return {"active": True, "plan": "timed", "expires_at": user_row["premium_until"]}
+        return {"active": False, "plan": None, "expires_at": user_row["premium_until"], "expired": True}
+    return {"active": False, "plan": None, "expires_at": None}
+
+
+@app.route("/api/premium/card-number", methods=["GET"])
+def premium_card_number():
+    return jsonify({"card_number": PREMIUM_CARD_NUMBER})
+
+
+@app.route("/api/premium/status", methods=["GET"])
+@token_required
+def premium_status():
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE id = ?", (g.current_user_id,)).fetchone()
+    return jsonify(user_premium_status(user))
+
+
+@app.route("/api/premium/request", methods=["POST"])
+@token_required
+def premium_request():
+    data = request.get_json(silent=True) or {}
+    plan = data.get("plan")
+    proof_image = data.get("proof_image")
+    if plan not in PLAN_LABELS:
+        return jsonify({"error": "Noto'g'ri reja tanlandi"}), 400
+    if not proof_image:
+        return jsonify({"error": "To'lov skrinshotini yuklang"}), 400
+
+    db = get_db()
+    db.execute(
+        "INSERT INTO premium_requests (user_id, plan, proof_image) VALUES (?, ?, ?)",
+        (g.current_user_id, plan, proof_image),
+    )
+    db.commit()
+    return jsonify({"message": "So'rovingiz yuborildi, admin tez orada ko'rib chiqadi"}), 201
+
+
+@app.route("/api/admin/premium-requests", methods=["GET"])
+@token_required
+@admin_required
+def list_premium_requests():
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT r.id, r.plan, r.proof_image, r.status, r.created_at,
+               u.id as user_id, u.name as user_name, u.email as user_email
+        FROM premium_requests r JOIN users u ON u.id = r.user_id
+        WHERE r.status = 'pending'
+        ORDER BY r.id DESC
+        """
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/admin/premium-requests/<int:request_id>/approve", methods=["POST"])
+@token_required
+@admin_required
+def approve_premium_request(request_id):
+    data = request.get_json(silent=True) or {}
+    duration = data.get("duration")  # 'month' | 'year' | 'lifetime'
+
+    db = get_db()
+    req = db.execute("SELECT * FROM premium_requests WHERE id = ?", (request_id,)).fetchone()
+    if not req:
+        return jsonify({"error": "So'rov topilmadi"}), 404
+
+    if duration == "lifetime":
+        db.execute("UPDATE users SET premium_lifetime = 1, premium_until = NULL WHERE id = ?", (req["user_id"],))
+    else:
+        days = 30 if duration == "month" else 365
+        new_expiry = datetime.datetime.utcnow() + datetime.timedelta(days=days)
+        db.execute(
+            "UPDATE users SET premium_until = ? WHERE id = ?",
+            (new_expiry.strftime("%Y-%m-%d %H:%M:%S"), req["user_id"]),
+        )
+    db.execute("UPDATE premium_requests SET status = 'approved' WHERE id = ?", (request_id,))
+    db.commit()
+    return jsonify({"message": "Premium faollashtirildi"})
+
+
+@app.route("/api/admin/premium-requests/<int:request_id>/reject", methods=["POST"])
+@token_required
+@admin_required
+def reject_premium_request(request_id):
+    db = get_db()
+    db.execute("UPDATE premium_requests SET status = 'rejected' WHERE id = ?", (request_id,))
+    db.commit()
+    return jsonify({"message": "So'rov rad etildi"})
+
+
+@app.route("/api/admin/premium-users", methods=["GET"])
+@token_required
+@admin_required
+def list_premium_users():
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, name, email, premium_until, premium_lifetime FROM users WHERE premium_lifetime = 1 OR premium_until IS NOT NULL"
+    ).fetchall()
+    result = []
+    for u in rows:
+        status = user_premium_status(u)
+        result.append({"id": u["id"], "name": u["name"], "email": u["email"], **status})
+    return jsonify(result)
+
+
+@app.route("/api/admin/premium-users/<int:user_id>/remove", methods=["POST"])
+@token_required
+@admin_required
+def remove_premium(user_id):
+    db = get_db()
+    db.execute("UPDATE users SET premium_lifetime = 0, premium_until = NULL WHERE id = ?", (user_id,))
+    db.commit()
+    return jsonify({"message": "Foydalanuvchi premiumdan chiqarildi"})
+
+
+# ---------------------------------------------------------------------------
+# News ("Yangiliklar") routes
+# ---------------------------------------------------------------------------
+@app.route("/api/news", methods=["GET"])
+def list_news():
+    db = get_db()
+    rows = db.execute("SELECT * FROM news ORDER BY id DESC LIMIT 12").fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/admin/news", methods=["POST"])
+@token_required
+@admin_required
+def add_news():
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    content = (data.get("content") or "").strip()
+    image = data.get("image") or None
+    if not title or not content:
+        return jsonify({"error": "Sarlavha va matnni kiriting"}), 400
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO news (title, content, image) VALUES (?, ?, ?)",
+        (title, content, image),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM news WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return jsonify(dict(row)), 201
+
+
+@app.route("/api/admin/news/<int:news_id>", methods=["DELETE"])
+@token_required
+@admin_required
+def delete_news(news_id):
+    db = get_db()
+    db.execute("DELETE FROM news WHERE id = ?", (news_id,))
+    db.commit()
+    return jsonify({"message": "Yangilik o'chirildi"})
+
+
+# ---------------------------------------------------------------------------
 # Code playground routes
 # ---------------------------------------------------------------------------
+USER_DB_DIR = os.path.join(BASE_DIR, "user_dbs")
+os.makedirs(USER_DB_DIR, exist_ok=True)
+
+
+def get_user_scratch_db(user_id):
+    path = os.path.join(USER_DB_DIR, f"user_{user_id}.db")
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+@app.route("/api/run-sql", methods=["POST"])
+@token_required
+def run_sql():
+    data = request.get_json(silent=True) or {}
+    sql = (data.get("sql") or "").strip()
+    if not sql:
+        return jsonify({"error": "SQL so'rovini kiriting"}), 400
+    if len(sql) > 20000:
+        return jsonify({"error": "So'rov juda uzun"}), 400
+
+    conn = get_user_scratch_db(g.current_user_id)
+    try:
+        cur = conn.cursor()
+        cur.executescript(sql) if ";" in sql.strip().rstrip(";") else cur.execute(sql)
+        conn.commit()
+        if cur.description:
+            columns = [d[0] for d in cur.description]
+            rows = [list(r) for r in cur.fetchall()]
+            return jsonify({"columns": columns, "rows": rows, "message": f"{len(rows)} qator qaytdi"})
+        return jsonify({"columns": [], "rows": [], "message": f"Bajarildi. {cur.rowcount if cur.rowcount != -1 else 0} qator o'zgardi"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    finally:
+        conn.close()
+
+
+@app.route("/api/sql-tables", methods=["GET"])
+@token_required
+def sql_tables():
+    conn = get_user_scratch_db(g.current_user_id)
+    try:
+        rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()
+        return jsonify([r["name"] for r in rows])
+    finally:
+        conn.close()
+
+
+@app.route("/api/sql-reset", methods=["POST"])
+@token_required
+def sql_reset():
+    path = os.path.join(USER_DB_DIR, f"user_{g.current_user_id}.db")
+    if os.path.exists(path):
+        os.remove(path)
+    return jsonify({"message": "Ma'lumotlar bazasi tozalandi"})
+
+
 @app.route("/api/run-python", methods=["POST"])
 @token_required
 def run_python():
     data = request.get_json(silent=True) or {}
     code = data.get("code") or ""
-    if len(code) > 20000:
+    if len(code) > 50000:
         return jsonify({"error": "Kod juda uzun"}), 400
     try:
         result = subprocess.run(
             ["python3", "-c", code],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=15,
         )
         output = result.stdout
         error = result.stderr
-    except subprocess.TimeoutExpired:
-        output = ""
-        error = "Xatolik: kod bajarilishi juda uzoq davom etdi (5 soniyadan oshdi)"
+    except subprocess.TimeoutExpired as e:
+        partial_out = (e.stdout or "") if hasattr(e, "stdout") else ""
+        partial_err = (e.stderr or "") if hasattr(e, "stderr") else ""
+        output = partial_out
+        error = (
+            (partial_err + "\n" if partial_err else "")
+            + "Xatolik: kod bajarilishi juda uzoq davom etdi (15 soniyadan oshdi). "
+            + "Ehtimol kodingizda cheksiz sikl (infinite loop) bor — shart yoki range() qiymatlarini tekshiring."
+        )
     except Exception as e:
         output = ""
         error = f"Xatolik: {e}"

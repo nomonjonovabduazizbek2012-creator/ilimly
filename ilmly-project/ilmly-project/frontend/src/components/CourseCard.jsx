@@ -17,8 +17,12 @@ const THUMB_ICONS = {
   react: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg",
   flask: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/flask/flask-original.svg",
   javascript: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/javascript/javascript-original.svg",
+  typescript: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg",
   design: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/css3/css3-original.svg",
   fullstack: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg",
+  java: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg",
+  php: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/php/php-original.svg",
+  csharp: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/csharp/csharp-original.svg",
 };
 
 export default function CourseCard({ course, index = 0 }) {
@@ -59,7 +63,9 @@ export default function CourseCard({ course, index = 0 }) {
           style={{ rotateX, rotateY }}
         >
           <div className="course-thumb" style={{ background: gradient }}>
-            {icon ? (
+            {course.photo ? (
+              <img src={course.photo} alt={course.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : icon ? (
               <div
                 style={{
                   width: 64,

@@ -20,6 +20,9 @@ import AdminLayout from "./components/AdminLayout";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminUsers from "./pages/AdminUsers";
 import AdminSettings from "./pages/AdminSettings";
+import AdminPremium from "./pages/AdminPremium";
+import AdminNews from "./pages/AdminNews";
+import Premium from "./pages/Premium";
 
 export default function App() {
   return (
@@ -82,8 +85,11 @@ export default function App() {
           <Route index element={<AdminDashboard />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="manage" element={<Admin />} />
+          <Route path="premium" element={<AdminPremium />} />
+          <Route path="news" element={<AdminNews />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>
+        <Route path="/premium" element={<Premium />} />
         <Route
           path="/admin/courses/:id/modules"
           element={

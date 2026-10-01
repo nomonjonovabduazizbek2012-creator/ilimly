@@ -13,6 +13,7 @@ export default function AdminModules() {
 
   const [moduleModalOpen, setModuleModalOpen] = useState(false);
   const [moduleTitle, setModuleTitle] = useState("");
+  const [moduleImage, setModuleImage] = useState("");
   const [moduleSaving, setModuleSaving] = useState(false);
   const [moduleError, setModuleError] = useState("");
 
@@ -37,6 +38,7 @@ export default function AdminModules() {
 
   function openAddModule() {
     setModuleTitle("");
+    setModuleImage("");
     setModuleError("");
     setModuleModalOpen(true);
   }
@@ -46,7 +48,7 @@ export default function AdminModules() {
     setModuleError("");
     setModuleSaving(true);
     try {
-      await api.post(`/courses/${id}/modules`, { title: moduleTitle });
+      await api.post(`/courses/${id}/modules`, { title: moduleTitle, image: moduleImage });
       setModuleModalOpen(false);
       loadData();
     } catch (err) {
@@ -153,7 +155,12 @@ export default function AdminModules() {
         modules.map((m) => (
           <div className="module-card" key={m.id}>
             <div className="module-card-head">
-              <h3>{m.title}</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {m.image && (
+                  <img src={m.image} alt={m.title} style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover" }} />
+                )}
+                <h3>{m.title}</h3>
+              </div>
               <div className="module-actions">
                 <button className="btn btn-outline" onClick={() => openAddLesson(m.id)}>
                   + Dars qo'shish
@@ -216,6 +223,29 @@ export default function AdminModules() {
                     onChange={(e) => setModuleTitle(e.target.value)}
                     placeholder="Masalan: 1-modul — Kirish"
                   />
+                </div>
+                <div className="field">
+                  <label>Modul rasmi (ixtiyoriy)</label>
+                  <label className="file-input-label">
+                    {moduleImage ? "Rasm tanlandi ✓" : "Rasm yuklash uchun bosing"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => setModuleImage(reader.result);
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </label>
+                  {moduleImage && (
+                    <div className="image-preview">
+                      <img src={moduleImage} alt="preview" />
+                    </div>
+                  )}
                 </div>
                 <div className="modal-actions">
                   <button

@@ -5,18 +5,28 @@ const DEFAULT_HTML = "<h1>Salom, dunyo!</h1>\n<p>Bu yerda HTML yozing.</p>";
 const DEFAULT_CSS = "body {\n  font-family: sans-serif;\n  color: #222;\n  padding: 20px;\n}\nh1 {\n  color: #22c55e;\n}";
 const DEFAULT_JS = "console.log('Salom, JS!');";
 const DEFAULT_PY = "print('Salom, Python!')\nfor i in range(3):\n    print(i)";
+const DEFAULT_SQL = "CREATE TABLE IF NOT EXISTS students (id INTEGER PRIMARY KEY, name TEXT, age INTEGER);\nINSERT INTO students (name, age) VALUES ('Ali', 20);\nSELECT * FROM students;";
 
 export default function CodePlayground() {
-  const [mode, setMode] = useState("web"); // 'web' | 'python'
-  const [activeFile, setActiveFile] = useState("html"); // 'html' | 'css' | 'js'
+  const [mode, setMode] = useState("web"); // 'web' | 'python' | 'sql'
+  const [activeFile, setActiveFile] = useState("html");
+  const [expanded, setExpanded] = useState(false);
+
   const [html, setHtml] = useState(DEFAULT_HTML);
   const [css, setCss] = useState(DEFAULT_CSS);
   const [js, setJs] = useState(DEFAULT_JS);
+  const [srcDoc, setSrcDoc] = useState("");
+
   const [pyCode, setPyCode] = useState(DEFAULT_PY);
   const [pyOutput, setPyOutput] = useState("");
   const [pyError, setPyError] = useState("");
   const [running, setRunning] = useState(false);
-  const [srcDoc, setSrcDoc] = useState("");
+
+  const [sqlCode, setSqlCode] = useState(DEFAULT_SQL);
+  const [sqlResult, setSqlResult] = useState(null);
+  const [sqlError, setSqlError] = useState("");
+  const [sqlRunning, setSqlRunning] = useState(false);
+  const [tables, setTables] = useState([]);
 
   const [snippets, setSnippets] = useState([]);
   const [showSaved, setShowSaved] = useState(false);
@@ -27,14 +37,19 @@ export default function CodePlayground() {
   function loadSnippets() {
     api.get("/snippets").then((res) => setSnippets(res.data));
   }
+  function loadTables() {
+    api.get("/sql-tables").then((res) => setTables(res.data)).catch(() => {});
+  }
 
-  useEffect(loadSnippets, []);
+  useEffect(() => {
+    loadSnippets();
+    loadTables();
+  }, []);
 
   function runWeb() {
     setSrcDoc(`<html><head><style>${css}</style></head><body>${html}<script>${js}<\/script></body></html>`);
   }
 
-  // Fayllar bir-biriga ulangan: kod o'zgarganda natija avtomatik yangilanadi
   useEffect(() => {
     const t = setTimeout(runWeb, 400);
     return () => clearTimeout(t);
@@ -54,6 +69,28 @@ export default function CodePlayground() {
     } finally {
       setRunning(false);
     }
+  }
+
+  async function runSql() {
+    setSqlRunning(true);
+    setSqlResult(null);
+    setSqlError("");
+    try {
+      const res = await api.post("/run-sql", { sql: sqlCode });
+      setSqlResult(res.data);
+      loadTables();
+    } catch (err) {
+      setSqlError(errMsg(err, "So'rovni bajarishda xatolik"));
+    } finally {
+      setSqlRunning(false);
+    }
+  }
+
+  async function resetSql() {
+    if (!confirm("Ma'lumotlar bazangizni butunlay tozalamoqchimisiz? Bu amalni qaytarib bo'lmaydi.")) return;
+    await api.post("/sql-reset");
+    setSqlResult(null);
+    loadTables();
   }
 
   async function handleSave(e) {
@@ -100,10 +137,10 @@ export default function CodePlayground() {
       <div className="section-head">
         <div>
           <h2>Kod muharriri</h2>
-          <p>HTML/CSS/JS yozing va jonli ko'ring, yoki Python kodini ishga tushiring.</p>
+          <p>HTML/CSS/JS, Python yoki SQL yozing va to'g'ridan-to'g'ri natijasini ko'ring.</p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button className="btn btn-outline" onClick={() => setShowSaved(true)}>
+          <button className="btn btn-primary" onClick={() => setShowSaved(true)}>
             📁 Saqlanganlar {snippets.length > 0 && `(${snippets.length})`}
           </button>
         </div>
@@ -116,10 +153,13 @@ export default function CodePlayground() {
         <button className={mode === "python" ? "active" : ""} onClick={() => setMode("python")}>
           🐍 Python
         </button>
+        <button className={mode === "sql" ? "active" : ""} onClick={() => setMode("sql")}>
+          🗄️ Ma'lumotlar bazasi (SQL)
+        </button>
       </div>
 
-      {mode === "web" ? (
-        <div className="code-editor-shell">
+      {mode === "web" && (
+        <div className={`code-editor-shell ${expanded ? "expanded" : ""}`}>
           <div className="code-editor-pane">
             <div className="file-tabs">
               <button className={activeFile === "html" ? "active" : ""} onClick={() => setActiveFile("html")}>
@@ -130,6 +170,9 @@ export default function CodePlayground() {
               </button>
               <button className={activeFile === "js" ? "active" : ""} onClick={() => setActiveFile("js")}>
                 <span className="dot dot-js" /> script.js
+              </button>
+              <button className="expand-btn" onClick={() => setExpanded((v) => !v)} title="Kattalashtirish">
+                {expanded ? "⤡ Kichraytirish" : "⤢ Kattalashtirish"}
               </button>
             </div>
 
@@ -158,10 +201,17 @@ export default function CodePlayground() {
             <iframe title="preview" srcDoc={srcDoc} className="preview-frame" />
           </div>
         </div>
-      ) : (
-        <div>
-          <label style={{ display: "block", marginBottom: 6, fontSize: "0.82rem", color: "var(--ink-dim)" }}>Python kod</label>
-          <textarea className="code-textarea" style={{ minHeight: 220 }} value={pyCode} onChange={(e) => setPyCode(e.target.value)} />
+      )}
+
+      {mode === "python" && (
+        <div className={expanded ? "expanded-single" : ""}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <label style={{ fontSize: "0.82rem", color: "var(--ink-dim)" }}>Python kod</label>
+            <button className="expand-btn" onClick={() => setExpanded((v) => !v)}>
+              {expanded ? "⤡ Kichraytirish" : "⤢ Kattalashtirish"}
+            </button>
+          </div>
+          <textarea className="code-textarea code-textarea-xl" value={pyCode} onChange={(e) => setPyCode(e.target.value)} spellCheck={false} />
 
           <div style={{ display: "flex", gap: 10, margin: "14px 0" }}>
             <button className="btn btn-primary" onClick={runPython} disabled={running}>
@@ -173,11 +223,89 @@ export default function CodePlayground() {
           </div>
 
           <label style={{ display: "block", marginBottom: 6, fontSize: "0.82rem", color: "var(--ink-dim)" }}>Natija</label>
-          <div className="code-output">
+          <div className="code-output code-output-xl">
             {pyOutput}
             {pyError && <span style={{ color: "var(--danger)" }}>{pyError}</span>}
             {!pyOutput && !pyError && "Natija shu yerda chiqadi..."}
           </div>
+        </div>
+      )}
+
+      {mode === "sql" && (
+        <div>
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 14 }}>
+            <div style={{ flex: 2, minWidth: 280 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <label style={{ fontSize: "0.82rem", color: "var(--ink-dim)" }}>SQL so'rovi</label>
+                <button className="expand-btn" onClick={() => setExpanded((v) => !v)}>
+                  {expanded ? "⤡ Kichraytirish" : "⤢ Kattalashtirish"}
+                </button>
+              </div>
+              <textarea
+                className={`code-textarea ${expanded ? "code-textarea-xl" : "code-textarea-full"}`}
+                value={sqlCode}
+                onChange={(e) => setSqlCode(e.target.value)}
+                spellCheck={false}
+              />
+              <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+                <button className="btn btn-primary" onClick={runSql} disabled={sqlRunning}>
+                  {sqlRunning ? "Ishlamoqda..." : "▶️ Ishga tushirish"}
+                </button>
+                <button className="btn btn-danger" onClick={resetSql}>
+                  🗑️ Bazani tozalash
+                </button>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <label style={{ display: "block", marginBottom: 6, fontSize: "0.82rem", color: "var(--ink-dim)" }}>
+                Jadvallar
+              </label>
+              <div className="admin-panel" style={{ padding: 14 }}>
+                {tables.length === 0 ? (
+                  <p style={{ color: "var(--ink-dim)", fontSize: "0.85rem", margin: 0 }}>Hali jadval yo'q.</p>
+                ) : (
+                  tables.map((t) => (
+                    <div key={t} style={{ fontFamily: "monospace", fontSize: "0.85rem", padding: "4px 0" }}>
+                      🗂️ {t}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <label style={{ display: "block", marginBottom: 6, fontSize: "0.82rem", color: "var(--ink-dim)" }}>Natija</label>
+          {sqlError ? (
+            <div className="code-output" style={{ color: "var(--danger)" }}>{sqlError}</div>
+          ) : sqlResult ? (
+            sqlResult.columns.length > 0 ? (
+              <div style={{ overflowX: "auto" }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      {sqlResult.columns.map((c) => (
+                        <th key={c}>{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sqlResult.rows.map((row, i) => (
+                      <tr key={i}>
+                        {row.map((cell, j) => (
+                          <td key={j}>{String(cell)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="code-output">{sqlResult.message}</div>
+            )
+          ) : (
+            <div className="code-output">Natija shu yerda chiqadi...</div>
+          )}
         </div>
       )}
 
